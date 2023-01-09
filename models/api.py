@@ -257,29 +257,31 @@ def Detect(
                                    (1, 1, 1))
     assert slice_x2y2, 'Add slice layer failed'
     anchors = np.concatenate(anchors, 0)[np.newaxis]
+    anchors = np.concatenate([anchors, anchors], 2)
     anchors = network.add_constant(anchors.shape, anchors)
     assert anchors, 'Add constant layer failed'
     strides = np.concatenate(strides, 1)[..., np.newaxis]
     strides = network.add_constant(strides.shape, strides)
     assert strides, 'Add constant layer failed'
+    neg = network.add_constant([1, 1, 1],
+                               np.array(
+                                   [[[-1.]]],
+                                   dtype=np.float16 if fp16 else np.float32))
+    _slice_x1y1 = network.add_elementwise(slice_x1y1.get_output(0),
+                                          neg.get_output(0),
+                                          trt.ElementWiseOperation.PROD)
+    Cat_xyxy = network.add_concatenation(
+        [_slice_x1y1.get_output(0),
+         slice_x2y2.get_output(0)])
+    assert Cat_xyxy, 'Add concatenation layer failed'
+    Cat_xyxy.axis = 2
 
-    Sub = network.add_elementwise(anchors.get_output(0),
-                                  slice_x1y1.get_output(0),
-                                  trt.ElementWiseOperation.SUB)
-    assert Sub, 'Add elementwise layer failed'
-    Add = network.add_elementwise(anchors.get_output(0),
-                                  slice_x2y2.get_output(0),
+    Add = network.add_elementwise(Cat_xyxy.get_output(0),
+                                  anchors.get_output(0),
                                   trt.ElementWiseOperation.SUM)
     assert Add, 'Add elementwise layer failed'
-    x1y1 = Sub.get_output(0)
-    x2y2 = Add.get_output(0)
 
-    Cat_bboxes_ = network.add_concatenation([x1y1, x2y2])
-    assert Cat_bboxes_, 'Add concatenation layer failed'
-    Cat_bboxes_.axis = 2
-
-    BBOXES = network.add_elementwise(Cat_bboxes_.get_output(0),
-                                     strides.get_output(0),
+    BBOXES = network.add_elementwise(Add.get_output(0), strides.get_output(0),
                                      trt.ElementWiseOperation.PROD)
     assert BBOXES, 'Add elementwise layer failed'
     plugin_creator = trt.get_plugin_registry().get_plugin_creator(
