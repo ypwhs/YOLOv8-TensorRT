@@ -39,6 +39,9 @@ def parse_args():
     parser.add_argument('--sim',
                         action='store_true',
                         help='simplify onnx model')
+    parser.add_argument('--dynamic',
+                        action='store_true',
+                        help='export onnx dynamic model')
     parser.add_argument('--input-shape',
                         nargs='+',
                         type=int,
@@ -53,6 +56,7 @@ def parse_args():
     PostDetect.conf_thres = args.conf_thres
     PostDetect.iou_thres = args.iou_thres
     PostDetect.topk = args.topk
+    PostDetect.dynamic = True
     return args
 
 
@@ -68,6 +72,15 @@ def main(args):
     for _ in range(2):
         model(fake_input)
     save_path = args.weights.replace('.pt', '.onnx')
+    dynamic = {}
+    if args.dynamic:
+        b = 'batch'
+        dynamic.update(
+            dict(images={0: 'batch'},
+                 num_dets={0: 'batch'},
+                 bboxes={0: 'batch'},
+                 scores={0: 'batch'},
+                 labels={0: 'batch'}))
     with BytesIO() as f:
         torch.onnx.export(
             model,
@@ -75,7 +88,8 @@ def main(args):
             f,
             opset_version=args.opset,
             input_names=['images'],
-            output_names=['num_dets', 'bboxes', 'scores', 'labels'])
+            output_names=['num_dets', 'bboxes', 'scores', 'labels'],
+            dynamic_axes=dynamic)
         f.seek(0)
         onnx_model = onnx.load(f)
     onnx.checker.check_model(onnx_model)
