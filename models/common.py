@@ -165,6 +165,23 @@ class PostSeg(nn.Module):
         return box.transpose(1, 2), score, cls
 
 
+class PostDetect_BPU(nn.Module):
+    export = True
+    shape = None
+    dynamic = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+    def forward(self, x):
+        res = []
+        for i in range(self.nl):
+            dfl = self.cv2[i](x[i]).permute(0, 2, 3, 1).contiguous()
+            cls = self.cv3[i](x[i]).sigmoid().permute(0, 2, 3, 1).contiguous()
+            res.append(torch.cat([dfl, cls], -1))
+        return res
+
+
 class PostSeg_BPU(nn.Module):
     export = True
     shape = None
@@ -175,42 +192,31 @@ class PostSeg_BPU(nn.Module):
 
     def forward(self, x):
         p = self.proto(x[0])  # mask protos
-        res = []
-        dets = self.forward_det(x)
+        res = self.forward_det(x)
         for i in range(self.nl):
-            det = dets[i]
             mi = self.cv4[i](x[i]).permute(0, 2, 3, 1).contiguous()
-            res.append(torch.cat([det, mi], -1))
+            res[i].append(mi)
         res.append(p)
-        return res
-
-    # def forward_det(self, x):
-    #     shape = x[0].shape
-    #     b, res = shape[0], []
-    #     for i in range(self.nl):
-    #         dfl = self.cv2[i](x[i]).reshape(b, 4, self.reg_max, -1)
-    #         dfl = dfl.permute(0, 3, 1, 2).contiguous().softmax(-1)
-    #         dfl = dfl @ torch.arange(self.reg_max).to(dfl)
-    #         cl = self.cv3[i](x[i]).reshape(b, self.nc, -1).sigmoid()
-    #         cl = cl.transpose(1, 2).contiguous()
-    #         res.append(torch.cat([dfl, cl], 2))
-    #     return res
+        return sum(res[:3], []) + res[-1:]
 
     def forward_det(self, x):
         res = []
         for i in range(self.nl):
             dfl = self.cv2[i](x[i])
             cl = self.cv3[i](x[i]).sigmoid()
-            r = torch.cat([dfl, *cl.max(1, keepdim=True)],
-                          1).permute(0, 2, 3, 1).contiguous()
-            res.append(r)
+            dfl = dfl.permute(0, 2, 3, 1).contiguous()
+            cl = cl.permute(0, 2, 3, 1).contiguous()
+            res.append([dfl, cl])
         return res
 
 
 def optim(module: nn.Module, is_bpu: bool = False):
     s = str(type(module))[6:-2].split('.')[-1]
     if s == 'Detect':
-        setattr(module, '__class__', PostDetect)
+        if is_bpu:
+            setattr(module, '__class__', PostDetect_BPU)
+        else:
+            setattr(module, '__class__', PostDetect)
     elif s == 'Segment':
         if is_bpu:
             setattr(module, '__class__', PostSeg_BPU)
