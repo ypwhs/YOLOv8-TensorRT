@@ -27,9 +27,7 @@ def parse_args():
     parser.add_argument('--sim',
                         action='store_true',
                         help='simplify onnx model')
-    parser.add_argument('--pt',
-                        action='store_true',
-                        help='export torchscript')
+    parser.add_argument('--pt', action='store_true', help='export torchscript')
     parser.add_argument('--input-shape',
                         nargs='+',
                         type=int,
