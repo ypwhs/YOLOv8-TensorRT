@@ -114,7 +114,7 @@ class PostDetect(nn.Module):
         x = [i.view(b, self.no, -1) for i in res]
         y = torch.cat(x, 2)
         box, cls = y[:, :self.reg_max * 4, ...], y[:, self.reg_max * 4:,
-                                                   ...].sigmoid()
+                                                 ...].sigmoid()
         box = box.view(b, 4, self.reg_max, -1).permute(0, 1, 3, 2).contiguous()
         box = box.softmax(-1) @ torch.arange(self.reg_max).to(box)
         box0, box1 = -box[:, :2, ...], box[:, 2:, ...]
@@ -155,7 +155,7 @@ class PostSeg(nn.Module):
         x = [i.view(b, self.no, -1) for i in res]
         y = torch.cat(x, 2)
         box, cls = y[:, :self.reg_max * 4, ...], y[:, self.reg_max * 4:,
-                                                   ...].sigmoid()
+                                                 ...].sigmoid()
         box = box.view(b, 4, self.reg_max, -1).permute(0, 1, 3, 2).contiguous()
         box = box.softmax(-1) @ torch.arange(self.reg_max).to(box)
         box0, box1 = -box[:, :2, ...], box[:, 2:, ...]
@@ -165,10 +165,30 @@ class PostSeg(nn.Module):
         return box.transpose(1, 2), score, cls
 
 
-def optim(module: nn.Module):
+class NCNNDetect(nn.Module):
+    export = True
+    shape = None
+    dynamic = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__()
+
+    def forward(self, x):
+        res = []
+        for i in range(self.nl):
+            dfl = self.cv2[i](x[i]).permute(0, 2, 3, 1).contiguous()
+            cls = self.cv3[i](x[i]).sigmoid().permute(0, 2, 3, 1).contiguous()
+            res.append(torch.cat([dfl, cls], -1))
+        return res
+
+
+def optim(module: nn.Module, ncnn: bool = False):
     s = str(type(module))[6:-2].split('.')[-1]
     if s == 'Detect':
-        setattr(module, '__class__', PostDetect)
+        if ncnn:
+            setattr(module, '__class__', NCNNDetect)
+        else:
+            setattr(module, '__class__', PostDetect)
     elif s == 'Segment':
         setattr(module, '__class__', PostSeg)
     elif s == 'C2f':
