@@ -177,8 +177,9 @@ class PostDetect_BPU(nn.Module):
         res = []
         for i in range(self.nl):
             dfl = self.cv2[i](x[i]).permute(0, 2, 3, 1).contiguous()
-            cls = self.cv3[i](x[i]).sigmoid().permute(0, 2, 3, 1).contiguous()
-            res.append(torch.cat([dfl, cls], -1))
+            cls = self.cv3[i](x[i]).permute(0, 2, 3, 1).contiguous()
+            res.append(dfl)
+            res.append(cls)
         return res
 
 

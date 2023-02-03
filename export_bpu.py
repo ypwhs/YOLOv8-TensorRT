@@ -53,7 +53,9 @@ def main(args):
     for _ in range(2):
         model(fake_input)
     save_path = args.weights.replace('.pt', '.onnx')
-    output_names = ['feat_80x80', 'feat_40x40', 'feat_20x20'] \
+    output_names = ['bboxes_80x80', 'scores_80x80',
+                    'bboxes_40x40', 'scores_40x40',
+                    'bboxes_20x20', 'scores_20x20'] \
         if args.det else ['bboxes_80x80', 'scores_80x80', 'mconf_80x80',
                           'bboxes_40x40', 'scores_40x40', 'mconf_40x40',
                           'bboxes_20x20', 'scores_20x20', 'mconf_20x20',
